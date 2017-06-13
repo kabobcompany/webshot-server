@@ -4,8 +4,7 @@
   "description": "",
   "main": "index.js",
   "dependencies": {
-    "memorystream": "^0.3.1",
-    "sharp": "^0.18.1",
+    "jimp": "^0.2.28",
     "webshot": "^0.18.0"
   },
   "devDependencies": {},

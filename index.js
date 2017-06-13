@@ -1,8 +1,16 @@
 var webshot = require('webshot');
 var http = require('http');
 var url = require('url');
-var sharp = require('sharp');
+var Jimp = require("jimp");
 var ip   = '127.0.0.1', port = 2000;
+
+function notFound(res, err) {
+  if (err) {
+    console.log(err);
+  }
+  res.writeHead(404);
+  res.end();
+}
 
 http.createServer(function (req, res) {
   var q = url.parse(req.url, true).query;
@@ -18,26 +26,40 @@ http.createServer(function (req, res) {
 
     var headSent = false;
     var renderStream = webshot(q.url, options);
-    var roundedCornerResizer = sharp().resize(640, 360).png();
-    renderStream.pipe(roundedCornerResizer);
-    
-    roundedCornerResizer.on('data', function(data) {
+    var bytes = [];
+    renderStream.on('data', function(data) {
       if (!headSent) {
         res.writeHead(200, {'Content-Type': 'image/png' });
         headSent = true;
         console.log('Screenshot...');
       }
-      res.write(data.toString('binary'), 'binary');
+      bytes.push(data);
     });
 
-    roundedCornerResizer.on('end', function () {
+    renderStream.on('end', function () {
       if (!headSent) {
-        res.writeHead(404);
+        notFound(res);
+        return;
       }
-      res.end();
+      Jimp.read(Buffer.concat(bytes), function (err, image) {
+        if (err) {
+          notFound(res, err);
+          return;
+        }
+        image.resize(640, 360)
+          .quality(80)
+          .getBuffer(Jimp.MIME_PNG, function (err, buffer) {
+            if (err) {
+              notFound(res, err);
+              return;
+            }
+            res.write(buffer);
+            res.end();
+          });
+      });
     });
 
-    roundedCornerResizer.on('error', function (err) {
+    renderStream.on('error', function (err) {
       console.log(err);
       res.writeHead(404);
       res.end();
