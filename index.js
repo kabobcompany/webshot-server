@@ -1,4 +1,22 @@
-var webshot = require('webshot');
+const puppeteer = require('puppeteer');
+
+async function takeScreenshot (url, options) {
+  const browser = await puppeteer.launch();
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  const resp = await page.goto(url, {"waitUntil" : "networkidle0"})
+    .catch((error) => { return { error: error }; });
+
+  if (resp.error) {
+    return resp;
+  }
+
+  const data = await page.screenshot(options);
+
+  await browser.close();
+  return data;
+}
+
 var http = require('http');
 var url = require('url');
 var Jimp = require("jimp");
@@ -17,36 +35,22 @@ http.createServer(function (req, res) {
   console.log('Request: ' + q.url);
   if (q.url) {
     var options = {
-      defaultWhiteBackground: true,
-      screenSize: {
-        width: 1280,
-        height: 720
-      }
+      type: 'png',
+      clip: { x: 0, y: 0, width: 1280, height: 720 }
     };
 
-    var headSent = false;
-    var renderStream = webshot(q.url, options);
-    var bytes = [];
-    renderStream.on('data', function(data) {
-      if (!headSent) {
-        res.writeHead(200, {'Content-Type': 'image/png' });
-        headSent = true;
-        console.log('Screenshot...');
-      }
-      bytes.push(data);
-    });
+    (async ()=> {
+      const data = await takeScreenshot(q.url, options);
 
-    renderStream.on('end', function () {
-      if (!headSent) {
-        notFound(res);
-        return;
-      }
-      Jimp.read(Buffer.concat(bytes), function (err, image) {
+      if (data.error) { return notFound(res, data.error); }
+
+      res.writeHead(200, {'Content-Type': 'image/png' });
+      Jimp.read(data, function (err, image) {
         if (err) {
           notFound(res, err);
           return;
         }
-        image.resize(640, 360)
+        image.resize(1280, 720)
           .quality(80)
           .getBuffer(Jimp.MIME_PNG, function (err, buffer) {
             if (err) {
@@ -57,13 +61,8 @@ http.createServer(function (req, res) {
             res.end();
           });
       });
-    });
+    })();
 
-    renderStream.on('error', function (err) {
-      console.log(err);
-      res.writeHead(404);
-      res.end();
-    });
   } else {
     res.writeHead(404);
     res.end();
